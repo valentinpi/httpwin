@@ -1,12 +1,18 @@
 // Documentation: https://docs.microsoft.com/en-us/windows/win32/winsock/getting-started-with-winsock
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
-int main(void)
+int main(int argc, char *argv[])
 {
+    if (argc < 2) {
+        printf("Usage: web-server <url>\n");
+        return EXIT_FAILURE;
+    }
+
     WSADATA wsaData;
     int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
     if (iResult != 0) {
@@ -24,11 +30,10 @@ int main(void)
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
-    const char *server = "example.com";
     struct addrinfo *result = NULL;
-    iResult = getaddrinfo(server, "80", &hints, &result);
+    iResult = getaddrinfo(argv[1], "80", &hints, &result);
     if (iResult != 0) {
-        printf("getaddrinfo on %s failed: %d\n", server, iResult);
+        printf("getaddrinfo on %s failed: %d\n", argv[1], iResult);
         WSACleanup();
         return EXIT_FAILURE;
     }
@@ -55,17 +60,23 @@ int main(void)
     }
     printf("connect succeeded\n");
 
-    char *sendbuf[5] = { "GET / HTTP/1.1", "Host: example.com", "User-Agent: curl/7.55.1", "Accept: */*", "" };
-    for (int i = 0; i < 5; i++) {
-        iResult = send(connectSocket, sendbuf[i], (int) strlen(sendbuf[i]), 0);
-        if (iResult == SOCKET_ERROR) {
-            printf("send failed: %d\n", WSAGetLastError());
-            closesocket(connectSocket);
-            freeaddrinfo(result);
-            return EXIT_FAILURE;
-        }
+    char sendbuf[1024];
+    // 22 byte
+    strcpy(sendbuf, "GET / HTTP/1.1\r\nHost: ");
+    strncat(sendbuf, argv[1], 1024 - 17);
+    // 17 byte
+    strcat(sendbuf, "\r\nAccept: */*\r\n\r\n");
+    iResult = send(connectSocket, sendbuf, (int) strlen(sendbuf), 0);
+    if (iResult == SOCKET_ERROR) {
+        printf("send failed: %d\n", WSAGetLastError());
+        closesocket(connectSocket);
+        freeaddrinfo(result);
+        return EXIT_FAILURE;
     }
-    
+    else {
+        printf("Bytes sent: %d\n", iResult);
+    }
+
     iResult = shutdown(connectSocket, SD_SEND);
     if (iResult == SOCKET_ERROR) {
         printf("shutdown failed: %d\n", WSAGetLastError());
@@ -73,24 +84,39 @@ int main(void)
         freeaddrinfo(result);
         return EXIT_FAILURE;
     }
-    else
-        printf("Bytes sent: %d\n", iResult);
 
-    const int recvbuflen = 1024;
+    const int recvbuflen = 128;
     char recvbuf[recvbuflen];
+    char *recvheap = NULL;
+    int recvheaplen = 0;
     iResult = 1;
     while (iResult > 0) {
         printf("iResult: %d -> ", iResult);
         iResult = recv(connectSocket, recvbuf, recvbuflen, 0);
         printf("%d\n", iResult);
-        if (iResult > 0)
-            printf("Bytes recevied: %d\n", iResult);
+        if (iResult > 0) {
+            printf("Bytes received: %d\n", iResult);
+            if (recvheaplen <= 0) {
+                recvheaplen += iResult;
+                recvheap = (char*) malloc(recvheaplen);
+                strcpy(recvheap, recvbuf);
+            }
+            else {
+                recvheaplen += iResult;
+                recvheap = (char*) realloc(recvheap, recvheaplen);
+                memcpy(recvheap + (recvheaplen - iResult) * sizeof(char), recvbuf, iResult);
+            }
+        }
         else if (iResult == 0)
             printf("Connection closed\n");
         else
             printf("recv failed: %d\n", WSAGetLastError());
     }
-    printf("\nText received:\n\n%s\n", recvbuf);
+
+    FILE *file = fopen64("index.html", "wtS");
+    fwrite(recvheap, sizeof(char), (size_t) recvheaplen, file);
+    fclose(file);
+    free(recvheap);
 
     closesocket(connectSocket);
     freeaddrinfo(result);

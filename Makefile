@@ -1,4 +1,4 @@
-CC_FLAGS = -O2 -std=c11 -Wall -Wextra
+CC_FLAGS = -g -O0 -std=c11 -Wall -Wextra
 LINK = -lws2_32
 
 web-server: obj/main.obj
