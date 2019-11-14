@@ -61,10 +61,10 @@ int main(int argc, char *argv[])
     printf("connect succeeded\n");
 
     char sendbuf[1024];
-    // 22 byte
+    // 22 byte, excluding '\0'
     strcpy(sendbuf, "GET / HTTP/1.1\r\nHost: ");
     strncat(sendbuf, argv[1], 1024 - 17);
-    // 17 byte
+    // 17 byte, excluding '\0'
     strcat(sendbuf, "\r\nAccept: */*\r\n\r\n");
     iResult = send(connectSocket, sendbuf, (int) strlen(sendbuf), 0);
     if (iResult == SOCKET_ERROR) {
@@ -85,26 +85,32 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    const int recvbuflen = 128;
+    const int recvbuflen = 32 + 1;
     char recvbuf[recvbuflen];
-    char *recvheap = NULL;
     int recvheaplen = 0;
+    char *recvheap = NULL;
     iResult = 1;
     while (iResult > 0) {
-        printf("iResult: %d -> ", iResult);
-        iResult = recv(connectSocket, recvbuf, recvbuflen, 0);
-        printf("%d\n", iResult);
+        int previResult = iResult;
+        iResult = recv(connectSocket, recvbuf, recvbuflen - 1, 0);
+        printf("iResult: %d -> %d\n", previResult, iResult);
         if (iResult > 0) {
-            printf("Bytes received: %d\n", iResult);
+            recvbuf[iResult] = '\0';
             if (recvheaplen <= 0) {
-                recvheaplen += iResult;
+                recvheaplen += (iResult + 1);
                 recvheap = (char*) malloc(recvheaplen);
+                recvheap[0] = '\0';
                 strcpy(recvheap, recvbuf);
             }
             else {
                 recvheaplen += iResult;
-                recvheap = (char*) realloc(recvheap, recvheaplen);
-                memcpy(recvheap + (recvheaplen - iResult) * sizeof(char), recvbuf, iResult);
+                char *recvheapnew = (char*) realloc(recvheap, recvheaplen);
+                if (recvheapnew == NULL)
+                    printf("realloc failed\n");
+                else {
+                    recvheap = recvheapnew;
+                    strcat(recvheap, recvbuf);
+                }
             }
         }
         else if (iResult == 0)
@@ -113,8 +119,19 @@ int main(int argc, char *argv[])
             printf("recv failed: %d\n", WSAGetLastError());
     }
 
+    int htmloffset = 0;
+    for (int i = 0; i < recvheaplen - 1; i++) {
+        if (recvheap[i] == '<') {
+            htmloffset = i;
+            i = recvheaplen - 1;
+        }
+    }
+
+    printf("recvheaplen: %d, strlen(recvheap): %d\n", recvheaplen - 1, strlen(recvheap));
+
     FILE *file = fopen64("index.html", "wtS");
-    fwrite(recvheap, sizeof(char), (size_t) recvheaplen, file);
+    // Write the content of recvheap without the nullterminator to a file
+    fwrite(recvheap + htmloffset * sizeof(char), sizeof(char), (size_t) recvheaplen - htmloffset - 1, file);
     fclose(file);
     free(recvheap);
 
