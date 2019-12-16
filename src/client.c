@@ -1,6 +1,5 @@
 // Documentation: https://docs.microsoft.com/en-us/windows/win32/winsock/getting-started-with-winsock
 
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <winsock2.h>
@@ -9,7 +8,7 @@
 int main(int argc, char *argv[])
 {
     if (argc < 2) {
-        printf("Usage: web-server <url>\n");
+        printf("Usage: httpwin <url>\n");
         return EXIT_FAILURE;
     }
 
@@ -85,22 +84,23 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    const int recvbuflen = 32 + 1;
-    char recvbuf[recvbuflen];
+    const int recvbuflen = 1024;
+    char recvbuf[recvbuflen + 1];
     int recvheaplen = 0;
     char *recvheap = NULL;
-    iResult = 1;
-    while (iResult > 0) {
+    iResult = 0;
+    while (iResult >= 0) {
         int previResult = iResult;
-        iResult = recv(connectSocket, recvbuf, recvbuflen - 1, 0);
+        iResult = recv(connectSocket, recvbuf, recvbuflen, 0);
         printf("iResult: %d -> %d\n", previResult, iResult);
+
         if (iResult > 0) {
             recvbuf[iResult] = '\0';
-            if (recvheaplen <= 0) {
-                recvheaplen += (iResult + 1);
+            if (recvheaplen == 0) {
+                recvheaplen = iResult;
                 recvheap = (char*) malloc(recvheaplen);
                 recvheap[0] = '\0';
-                strcpy(recvheap, recvbuf);
+                strncpy(recvheap, recvbuf, iResult + 1);
             }
             else {
                 recvheaplen += iResult;
@@ -109,108 +109,52 @@ int main(int argc, char *argv[])
                     printf("realloc failed\n");
                 else {
                     recvheap = recvheapnew;
-                    strcat(recvheap, recvbuf);
+                    strncat(recvheap, recvbuf, recvbuflen + 1);
                 }
             }
         }
-        else if (iResult == 0)
+        else if (iResult == 0) {
             printf("Connection closed\n");
-        else
+            iResult--;
+            break;
+        }
+        else {
             printf("recv failed: %d\n", WSAGetLastError());
-    }
-
-    int htmloffset = 0;
-    for (int i = 0; i < recvheaplen - 1; i++) {
-        if (recvheap[i] == '<') {
-            htmloffset = i;
-            i = recvheaplen - 1;
+            closesocket(connectSocket);
+            freeaddrinfo(result);
+            WSACleanup();
+            return 1;
         }
     }
 
-    printf("recvheaplen: %d, strlen(recvheap): %d\n", recvheaplen - 1, strlen(recvheap));
+    if (recvheaplen == 0) {
+        printf("No data sent");
+        closesocket(connectSocket);
+        freeaddrinfo(result);
+        WSACleanup();
+        return 1;
+    }
+
+    // TODO: Improve this
+    int htmloffset = 0;
+    for (int i = 0; i < recvheaplen; i++) {
+        if (recvheap[i] == '<') {
+            htmloffset = i;
+            i = recvheaplen;
+        }
+    }
+
+    printf("recvheaplen: %d, strlen(recvheap): %I64d\n", recvheaplen, strlen(recvheap));
 
     FILE *file = fopen64("index.html", "wtS");
     // Write the content of recvheap without the nullterminator to a file
-    fwrite(recvheap + htmloffset * sizeof(char), sizeof(char), (size_t) recvheaplen - htmloffset - 1, file);
+    fwrite(recvheap + htmloffset, sizeof(char), (size_t) recvheaplen - htmloffset, file);
     fclose(file);
     free(recvheap);
+    printf("Wrote index.html in directory of execution");
 
     closesocket(connectSocket);
     freeaddrinfo(result);
     WSACleanup();
     return EXIT_SUCCESS;
 }
-
-/* curl HTTP example */
-
-// C:\Users\Valentin\Dev\web-server>curl -v example.com
-// * Rebuilt URL to: example.com/
-// *   Trying 2606:2800:220:1:248:1893:25c8:1946...
-// * TCP_NODELAY set
-// * Connected to example.com (2606:2800:220:1:248:1893:25c8:1946) port 80 (#0)
-// > GET / HTTP/1.1
-// > Host: example.com
-// > User-Agent: curl/7.55.1
-// > Accept: */*
-// >
-// < HTTP/1.1 200 OK
-// < Accept-Ranges: bytes
-// < Cache-Control: max-age=604800
-// < Content-Type: text/html; charset=UTF-8
-// < Date: Thu, 31 Oct 2019 16:45:35 GMT
-// < Etag: "3147526947"
-// < Expires: Thu, 07 Nov 2019 16:45:35 GMT
-// < Last-Modified: Thu, 17 Oct 2019 07:18:26 GMT
-// < Server: ECS (dcb/7EA6)
-// < Vary: Accept-Encoding
-// < X-Cache: HIT
-// < Content-Length: 1256
-// <
-// <!doctype html>
-// <html>
-// <head>
-//     <title>Example Domain</title>
-// 
-//     <meta charset="utf-8" />
-//     <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-//     <meta name="viewport" content="width=device-width, initial-scale=1" />
-//     <style type="text/css">
-//     body {
-//         background-color: #f0f0f2;
-//         margin: 0;
-//         padding: 0;
-//         font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
-// 
-//     }
-//     div {
-//         width: 600px;
-//         margin: 5em auto;
-//         padding: 2em;
-//         background-color: #fdfdff;
-//         border-radius: 0.5em;
-//         box-shadow: 2px 3px 7px 2px rgba(0,0,0,0.02);
-//     }
-//     a:link, a:visited {
-//         color: #38488f;
-//         text-decoration: none;
-//     }
-//     @media (max-width: 700px) {
-//         div {
-//             margin: 0 auto;
-//             width: auto;
-//         }
-//     }
-//     </style>
-// </head>
-// 
-// <body>
-// <div>
-//     <h1>Example Domain</h1>
-//     <p>This domain is for use in illustrative examples in documents. You may use this
-//     domain in literature without prior coordination or asking for permission.</p>
-//     <p><a href="https://www.iana.org/domains/example">More information...</a></p>
-// </div>
-// </body>
-// </html>
-// * Connection #0 to host example.com left intact
-//
