@@ -2,7 +2,7 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
-int httpwin_server(const char *port)
+int httpwin_serve(const char *port)
 {
     // Resolve local address
     struct addrinfo hints;

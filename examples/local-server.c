@@ -10,9 +10,10 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
-    httpwin_init();
+    if (httpwin_init() != 0)
+        return EXIT_FAILURE;
 
-    if (httpwin_server(argv[1]) != 0) {
+    if (httpwin_serve(argv[1]) != 0) {
         httpwin_terminate();
         return EXIT_FAILURE;
     }
