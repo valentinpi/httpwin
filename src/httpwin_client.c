@@ -4,23 +4,21 @@
 
 char* httpwin_request(const char *url, const char *port, int *size)
 {
-    // Networking
-    struct addrinfo hints;
+    // Resolve external address
+    struct addrinfo hints = {};
     struct addrinfo *addressinfo = NULL;
     SOCKET connectSocket = INVALID_SOCKET;
-    // Saving
+    // Receive and send
     const int recvbuflen = 1024 * 64;
     char recvbuf[recvbuflen];
+    memset(recvbuf, 0, recvbuflen);
     int recvheaplen = 0;
     char *recvheap = NULL;
     // Tracking
     int iResult = 0;
 
-    ZeroMemory(&hints, sizeof(hints));
-    // Address family will be left unspecified, IP address will be either IPv4 or IPv6
     // ai: address info, AF: Address Family
     hints.ai_family = AF_INET;
-    // TCP stream socket
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
 
@@ -49,7 +47,7 @@ char* httpwin_request(const char *url, const char *port, int *size)
     /* BEGIN WRITE REQUEST HEADER */
 
     char sendbuf[1024];
-    // 22 byte, excluding '\0'
+    // 22 bytes, excluding '\0'
     char *header = "GET / HTTP/1.1\r\nHost: ";
     char *footer = "\r\nAccept: */*\r\n\r\n";
     strncpy(sendbuf, header, strlen(header) + 1);

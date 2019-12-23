@@ -5,12 +5,15 @@
 int httpwin_serve(const char *port)
 {
     // Resolve local address
-    struct addrinfo hints;
+    struct addrinfo hints = {};
     struct addrinfo *addressinfo = NULL;
     SOCKET server = INVALID_SOCKET, client = INVALID_SOCKET;
     int iResult = 0;
+    // Receive
+    const int recvbuflen = 1024;
+    char recvbuf[1024];
+    memset(recvbuf, 0, recvbuflen);
 
-    ZeroMemory(&hints, sizeof(hints));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
@@ -48,9 +51,6 @@ int httpwin_serve(const char *port)
         printf("accept failed with error: %d\n", WSAGetLastError());
         goto cleanup;
     }
-
-    const int recvbuflen = 1024;
-    char recvbuf[1024];
 
     iResult = recv(client, recvbuf, recvbuflen, 0);
     if (iResult > 0) {

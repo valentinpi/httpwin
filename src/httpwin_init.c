@@ -2,7 +2,6 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
-
 int httpwin_init()
 {
     WSADATA wsaData;
